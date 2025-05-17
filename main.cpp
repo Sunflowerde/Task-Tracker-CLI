@@ -48,6 +48,22 @@ std::vector<Task> loadTasks(const std::string& filename) {
   return tasks;
 }
 
+// 将新添加的任务保存进 json 文件
+void saveTasks(const std::vector<Task>& tasks, const std::string& filename) {
+   std::ofstream file(filename);
+   file << "[\n";
+   
+   // 写入文件
+   for (size_t i = 0; i < tasks.size(); ++i) {
+    file << "  " << tasks[i].toJson();
+    if (i != tasks.size() - 1) {
+      file << ",";
+      file << "\n";
+    }
+   }
+   file << "]";
+}
+
 int main(int argc, char *argv[]) {
   // 输入参数过少
   if (argc < 2) {
@@ -62,12 +78,16 @@ int main(int argc, char *argv[]) {
       std::cout << "Error: No description provided." << std::endl;
       return 1;
     }
+    // description 参数过多
+    if (argc >= 4) {
+      std::cout << "Error: There are too many descriptions." << std::endl;
+      return 1;
+    }
 
     // 添加任务
     std::string description = argv[2];
-    for (int i = 3; i < argc; ++i) {
-      description += " ";
-      description += argv[i];
-    }
+    std::vector<Task> tasks = loadTasks("tasks.json");
+    int newID = tasks.empty()? 1 : tasks.back().id + 1;
+    tasks.push_back({newID, description, "todo"});
   }
 }
