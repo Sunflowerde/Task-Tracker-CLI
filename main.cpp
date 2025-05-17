@@ -13,3 +13,9 @@ struct Task {
     "  \"status\": \"" + status + "\"\n}";
   }
 };
+
+int main() {
+  Task t = {1, "do homework", "todo"};
+  std::cout << t.toJson() << std::endl;
+  return 0;
+}
