@@ -2,97 +2,149 @@
 #include <string>
 #include <fstream>
 #include <vector>
+#include <sstream>
+#include <cstdlib>
 
 struct Task {
-  int id; // 用于表示每个任务的编号
-  std::string description; // 每项任务的具体描述
-  std::string status; // 每项任务的进行状态，包括 todo, done, in-progress
+  int id;
+  std::string description;
+  std::string status;
 
-  // 将 struct 转为 json 的函数
   std::string toJson() const {
     return "{\n    \"id\": " + std::to_string(id) + ",\n" + 
-    "    \"description\": \"" + description + "\",\n" + 
-    "    \"status\": \"" + status + "\"\n  }\n";
+           "    \"description\": \"" + description + "\",\n" + 
+           "    \"status\": \"" + status + "\"\n  }";
   }
 };
 
-// 解析 json 文件
+std::string getHomeDir() {
+  const char *home = std::getenv("HOME");
+  return home ? std::string(home) : "";
+}
+
+// 解析 json 文件，不破坏原字符串
 std::vector<Task> loadTasks(const std::string& filename) {
-  // 打开名为 filename 的文件，存储在 file 中方便后续操作
   std::ifstream file(filename);
-  std::string json;
-  std::vector<Task> tasks;
-
-  // 无法打开文件的情形
   if (!file.is_open()) {
-    std::cerr << "Failed to open file: " << filename << std::endl;
-    return tasks;
+    // 文件不存在，返回空 vector
+    return {};
   }
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+  std::string json = buffer.str();
 
-  // 将 file 中的内容读取到 json 中，直到出现文字终止符 '\0'
-  std::getline(file, json, '\0');
-
+  std::vector<Task> tasks;
   size_t pos = 0;
-  // 从 json 中找到第一个，将索引赋值给 pos，如果没有找到的话，find 返回值即为 std::string::npos
-  // 这样循环就能读取 json 中所有的任务
-  while ((pos = json.find("{")) != std::string::npos) {
+  while ((pos = json.find("{", pos)) != std::string::npos) {
     Task task;
-    json = json.substr(pos + 1); // 从 { 后的子串开始解析
-    task.id = std::stoi(json.substr(json.find(":") + 1, json.find(","))); // std::stoi 将字符串转换为整数，读取 ":" 和 "," 之间的 id
-    json = json.substr(json.find("description") + 13); // find 返回值为 d 的索引，跳过 10 个字母，"，:， 得到13
-    task.description = json.substr(0, json.find("\""));
-    json = json.substr(json.find("status") + 9);
-    task.status = json.substr(0, json.find("\""));
+
+    // 找 id
+    size_t id_pos = json.find("\"id\"", pos);
+    if (id_pos == std::string::npos) break;
+    size_t colon_pos = json.find(":", id_pos);
+    size_t comma_pos = json.find(",", id_pos);
+    if (colon_pos == std::string::npos || comma_pos == std::string::npos) break;
+    std::string id_str = json.substr(colon_pos + 1, comma_pos - colon_pos -1);
+    task.id = std::stoi(id_str);
+
+    // 找 description
+    size_t desc_pos = json.find("\"description\"", pos);
+    if (desc_pos == std::string::npos) break;
+    size_t desc_start = json.find("\"", desc_pos + 13); // 找第一个引号
+    size_t desc_end = json.find("\"", desc_start + 1);
+    if (desc_start == std::string::npos || desc_end == std::string::npos) break;
+    task.description = json.substr(desc_start + 1, desc_end - desc_start - 1);
+
+    // 找 status
+    size_t status_pos = json.find("\"status\"", pos);
+    if (status_pos == std::string::npos) break;
+    size_t status_start = json.find("\"", status_pos + 8);
+    size_t status_end = json.find("\"", status_start + 1);
+    if (status_start == std::string::npos || status_end == std::string::npos) break;
+    task.status = json.substr(status_start + 1, status_end - status_start - 1);
+
     tasks.push_back(task);
-    json = json.substr(json.find("}") + 1);
+
+    // 更新 pos 跳到当前 } 后面，准备找下一个任务
+    pos = json.find("}", status_end);
+    if (pos == std::string::npos) break;
+    pos += 1;
   }
+
   return tasks;
 }
 
-// 将新添加的任务保存进 json 文件
 void saveTasks(const std::vector<Task>& tasks, const std::string& filename) {
-   std::ofstream file(filename);
-   file << "[\n";
-   
-   // 写入文件
-   for (size_t i = 0; i < tasks.size(); ++i) {
+  std::ofstream file(filename);
+  file << "[\n";
+  for (size_t i = 0; i < tasks.size(); ++i) {
     file << "  " << tasks[i].toJson();
     if (i != tasks.size() - 1) {
       file << ",";
-      file << "\n";
     }
-   }
-   file << "]";
+    file << "\n";
+  }
+  file << "]";
 }
 
-int main(int argc, char *argv[]) {
-  // 输入参数过少
+int main(int argc, char* argv[]) {
   if (argc < 2) {
-    std::cout << "Usage: task-cli <command> [arguments...]" << std::endl;
+    std::cout << "Usage: task-cli <command> [arguments...]\n";
+    std::cout << "Commands:\n  add <description>\n  update <id> <new_description>\n  list\n";
     return 1;
   }
 
   std::string command = argv[1];
+  std::string filename = getHomeDir() + "/tasks.json";
+  auto tasks = loadTasks(filename);
+
   if (command == "add") {
-    // 未提供 description 参数
-    if (argc == 2) {
-      std::cout << "Error: No description provided." << std::endl;
+    if (argc != 3) {
+      std::cerr << "Usage: task-cli add <description>\n";
       return 1;
     }
-    // description 参数过多
-    if (argc >= 4) {
-      std::cout << "Error: There are too many descriptions." << std::endl;
-      return 1;
-    }
-
-    // 添加任务
     std::string description = argv[2];
-    std::vector<Task> tasks = loadTasks("tasks.json");
-    int newID = tasks.empty()? 1 : tasks.back().id + 1;
+    int newID = tasks.empty() ? 1 : tasks.back().id + 1;
     tasks.push_back({newID, description, "todo"});
-    saveTasks(tasks, "tasks.json");
+    saveTasks(tasks, filename);
+    std::cout << "Task added successfully (ID: " << newID << ")\n";
 
-    std::cout << "Task added successfully (ID: " << newID << ")" << std::endl;
+  } else if (command == "update") {
+    if (argc != 4) {
+      std::cerr << "Usage: task-cli update <id> <new_description>\n";
+      return 1;
+    }
+    int id = std::stoi(argv[2]);
+    std::string newDescription = argv[3];
+    bool found = false;
+    for (auto& task : tasks) {
+      if (task.id == id) {
+        task.description = newDescription;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      std::cerr << "Error: Task with ID " << id << " not found\n";
+      return 1;
+    }
+    saveTasks(tasks, filename);
+    std::cout << "Task updated successfully (ID: " << id << ")\n";
+
+  } else if (command == "list") {
+    if (tasks.empty()) {
+      std::cout << "No tasks found.\n";
+      return 0;
+    }
+    for (const auto& task : tasks) {
+      std::cout << "ID: " << task.id
+                << ", Description: " << task.description
+                << ", Status: " << task.status << "\n";
+    }
+
+  } else {
+    std::cerr << "Unknown command: " << command << "\n";
+    return 1;
   }
 
   return 0;
