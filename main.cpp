@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <vector>
 
 struct Task {
   int id; // 用于表示每个任务的编号
@@ -9,9 +10,9 @@ struct Task {
 
   // 将 struct 转为 json 的函数
   std::string toJson() const {
-    return "{\n  \"id\": " + std::to_string(id) + ",\n" + 
-    "  \"description\": \"" + description + "\",\n" + 
-    "  \"status\": \"" + status + "\"\n}";
+    return "{\n    \"id\": " + std::to_string(id) + ",\n" + 
+    "    \"description\": \"" + description + "\",\n" + 
+    "    \"status\": \"" + status + "\"\n  }\n";
   }
 };
 
@@ -89,5 +90,10 @@ int main(int argc, char *argv[]) {
     std::vector<Task> tasks = loadTasks("tasks.json");
     int newID = tasks.empty()? 1 : tasks.back().id + 1;
     tasks.push_back({newID, description, "todo"});
+    saveTasks(tasks, "tasks.json");
+
+    std::cout << "Task added successfully (ID: " << newID << ")" << std::endl;
   }
+
+  return 0;
 }
